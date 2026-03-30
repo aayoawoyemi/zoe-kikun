@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#000000">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>Zoe Kikun</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      touch-action: none;
+      background: #000;
+    }
+
+    body {
+      background: #000;
+      color: #fff;
+      font-family: 'Inter', -apple-system, system-ui, sans-serif;
+      height: 100dvh;
+      width: 100vw;
+      position: relative;
+      -webkit-tap-highlight-color: transparent;
+      overflow: hidden;
+    }
+
+    /* ── Swipeable pages ── */
+    .pages {
+      display: flex;
+      height: 100%;
+      transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+      will-change: transform;
+    }
+
+    .pages.swiping { transition: none; }
+
+    .page {
+      width: 100vw;
+      height: 100%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Vignette */
+    .page::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.5) 100%);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* ── Grid (centered, the main thing) ── */
+    .grid-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+    }
+
+    .grid {
+      display: grid;
+      width: fit-content;
+    }
+
+    .dot {
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.8);
+    }
+
+    .dot.gone {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .dot.today {
+      background: #fff;
+      box-shadow: 0 0 10px 2px rgba(255, 255, 255, 0.3), 0 0 3px 1px rgba(255, 255, 255, 0.5);
+      animation: pulse 3s ease-in-out infinite;
+    }
+
+    .dot.remaining {
+      animation: breathe 4s ease-in-out infinite;
+      animation-delay: var(--bd, 0s);
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 10px 2px rgba(255, 255, 255, 0.3), 0 0 3px 1px rgba(255, 255, 255, 0.5); }
+      50% { box-shadow: 0 0 18px 4px rgba(255, 255, 255, 0.45), 0 0 5px 2px rgba(255, 255, 255, 0.7); }
+    }
+
+    @keyframes breathe {
+      0%, 100% { opacity: 0.75; }
+      50% { opacity: 0.93; }
+    }
+
+    /* ── Draggable text blocks ── */
+    .floating-text {
+      position: absolute;
+      z-index: 5;
+      text-align: center;
+      max-width: 80vw;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .floating-text.dragging {
+      cursor: grabbing;
+    }
+
+    .floating-text.editing {
+      cursor: text;
+      user-select: text;
+    }
+
+    .floating-text textarea {
+      font-size: 14px;
+      font-weight: 300;
+      color: rgba(255, 255, 255, 0.25);
+      letter-spacing: 0.5px;
+      line-height: 1.6;
+      background: none;
+      border: none;
+      outline: none;
+      text-align: center;
+      width: 100%;
+      min-width: 120px;
+      resize: none;
+      font-family: 'Inter', sans-serif;
+      overflow: hidden;
+      min-height: 22px;
+      caret-color: rgba(255,255,255,0.4);
+      pointer-events: none;
+      cursor: grab;
+    }
+
+    .floating-text.editing textarea {
+      pointer-events: all;
+      cursor: text;
+      color: rgba(255, 255, 255, 0.45);
+    }
+
+    .floating-text textarea::placeholder {
+      color: rgba(255, 255, 255, 0.06);
+    }
+
+    /* Count block (also draggable) */
+    .floating-count {
+      position: absolute;
+      z-index: 5;
+      text-align: center;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .floating-count.dragging { cursor: grabbing; }
+
+    .page-name {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      color: rgba(255, 255, 255, 0.15);
+      margin-bottom: 2px;
+    }
+
+    .page-count {
+      font-size: clamp(36px, 9vw, 64px);
+      font-weight: 100;
+      letter-spacing: -2px;
+      line-height: 1;
+      color: rgba(255, 255, 255, 0.7);
+      transition: opacity 0.4s ease;
+    }
+
+    .page-count.hidden { opacity: 0; }
+
+    .page-sublabel {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.1);
+      font-weight: 300;
+      margin-top: 4px;
+    }
+
+    /* ── Indicators ── */
+    .indicators {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 6px) + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      z-index: 30;
+    }
+
+    .indicator {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.12);
+      transition: all 0.3s ease;
+    }
+
+    .indicator.active {
+      background: rgba(255, 255, 255, 0.5);
+      transform: scale(1.3);
+    }
+
+    /* ── Edit overlay ── */
+    .edit-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.94);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s ease;
+    }
+
+    .edit-overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .edit-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      color: rgba(255,255,255,0.25);
+      margin-bottom: 28px;
+    }
+
+    .edit-form {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .edit-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .edit-field label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: rgba(255,255,255,0.18);
+    }
+
+    .edit-field input {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.7);
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 300;
+      outline: none;
+      -webkit-appearance: none;
+      transition: border-color 0.3s ease;
+    }
+
+    .edit-field input:focus {
+      border-color: rgba(255,255,255,0.2);
+    }
+
+    .edit-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 6px;
+    }
+
+    .edit-btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 300;
+      letter-spacing: 1px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+    }
+
+    .edit-btn.save {
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.7);
+    }
+
+    .edit-btn.save:active { background: rgba(255,255,255,0.15); }
+
+    .edit-btn.cancel {
+      background: transparent;
+      color: rgba(255,255,255,0.25);
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .edit-btn.delete {
+      background: transparent;
+      color: rgba(255,80,80,0.4);
+      border: 1px solid rgba(255,80,80,0.08);
+      margin-top: 6px;
+    }
+
+    /* ── Add page ── */
+    .add-page {
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 12px);
+      right: 14px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.18);
+      font-size: 17px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 30;
+      transition: all 0.2s ease;
+    }
+
+    .add-page:active {
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.4);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="pages" id="pages"></div>
+  <div class="indicators" id="indicators"></div>
+  <button class="add-page" id="addPage">+</button>
+
+  <!-- Edit overlay -->
+  <div class="edit-overlay" id="editOverlay">
+    <div class="edit-title">Edit countdown</div>
+    <div class="edit-form">
+      <div class="edit-field">
+        <label>Name</label>
+        <input type="text" id="editName" placeholder="Semester">
+      </div>
+      <div class="edit-field">
+        <label>Start date</label>
+        <input type="date" id="editStart">
+      </div>
+      <div class="edit-field">
+        <label>End date</label>
+        <input type="date" id="editEnd">
+      </div>
+      <div class="edit-actions">
+        <button class="edit-btn cancel" id="editCancel">Cancel</button>
+        <button class="edit-btn save" id="editSave">Save</button>
+      </div>
+      <button class="edit-btn delete" id="editDelete">Remove countdown</button>
+    </div>
+  </div>
+
+  <script>
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const BIRTH_YEAR = 2006;
+    const LIFE_EXPECTANCY = 80;
+
+    function defaultPages() {
+      const semesterEnd = new Date(2026, 4, 16);
+      const yearEnd = new Date(2027, 0, 1);
+      const birthDate = new Date(BIRTH_YEAR, 0, 1);
+      const lifeEnd = new Date(BIRTH_YEAR + LIFE_EXPECTANCY, 0, 1);
+      return [
+        {
+          id: 's1', name: 'Semester', unit: 'day',
+          start: today.toISOString(), end: semesterEnd.toISOString(),
+          textAbove: 'Prince Ayo', textBelow: 'make it count',
+          // Positions as % of viewport. null = use defaults
+          posAbove: { x: 50, y: 15 },
+          posBelow: { x: 50, y: 88 },
+          posCount: { x: 50, y: 8 },
+        },
+        {
+          id: 'y1', name: 'Year', unit: 'day',
+          start: new Date(2026, 0, 1).toISOString(), end: yearEnd.toISOString(),
+          textAbove: '', textBelow: '',
+          posAbove: { x: 50, y: 15 },
+          posBelow: { x: 50, y: 88 },
+          posCount: { x: 50, y: 8 },
+        },
+        {
+          id: 'life', name: 'Life', unit: 'week',
+          start: birthDate.toISOString(), end: lifeEnd.toISOString(),
+          textAbove: '', textBelow: 'memento mori',
+          posAbove: { x: 50, y: 12 },
+          posBelow: { x: 50, y: 92 },
+          posCount: { x: 50, y: 5 },
+        },
+      ];
+    }
+
+    let pages = [];
+    let currentPage = 0;
+
+    const saved = localStorage.getItem('vanitas-pages-v3');
+    if (saved) {
+      pages = JSON.parse(saved);
+      if (!pages.length) pages = defaultPages();
+      // Ensure position fields exist
+      pages.forEach(p => {
+        if (!p.posAbove) p.posAbove = { x: 50, y: 15 };
+        if (!p.posBelow) p.posBelow = { x: 50, y: 88 };
+        if (!p.posCount) p.posCount = { x: 50, y: 8 };
+      });
+    } else {
+      pages = defaultPages();
+    }
+
+    function save() {
+      localStorage.setItem('vanitas-pages-v3', JSON.stringify(pages));
+    }
+
+    // Register service worker for PWA
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+
+    const pagesEl = document.getElementById('pages');
+    const indicatorsEl = document.getElementById('indicators');
+
+    function formatSublabel(remaining, unit) {
+      if (unit === 'week') {
+        const years = Math.floor(remaining / 52);
+        const weeks = remaining % 52;
+        if (years > 0 && weeks > 0) return `${years}y ${weeks}w`;
+        if (years > 0) return `${years} year${years !== 1 ? 's' : ''}`;
+        return `${weeks} week${weeks !== 1 ? 's' : ''}`;
+      }
+      const weeks = Math.floor(remaining / 7);
+      const days = remaining % 7;
+      if (weeks > 0 && days > 0) return `${weeks}w ${days}d`;
+      if (weeks > 0) return `${weeks} week${weeks !== 1 ? 's' : ''}`;
+      return `${days} day${days !== 1 ? 's' : ''}`;
+    }
+
+    function calcGrid(totalUnits) {
+      const vw = window.innerWidth - 32;
+      const vh = window.innerHeight - 32;
+
+      let cols;
+      if (totalUnits > 2000) cols = 52;
+      else if (totalUnits > 500) cols = 20;
+      else if (totalUnits > 100) cols = 14;
+      else cols = 7;
+
+      const rows = Math.ceil(totalUnits / cols);
+      const maxGapRatio = 0.3;
+      const sizeByW = vw / (cols * (1 + maxGapRatio));
+      const sizeByH = vh / (rows * (1 + maxGapRatio));
+      let dotSize = Math.min(sizeByW, sizeByH);
+      dotSize = Math.max(1.5, Math.min(dotSize, 18));
+      const gap = Math.max(1, Math.round(dotSize * 0.3));
+
+      return { cols, dotSize, gap };
+    }
+
+    function autoResize(ta) {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    }
+
+    // ── Drag system ──
+    function makeDraggable(el, getPos, setPos, pageIdx) {
+      let startTouchX, startTouchY, startElX, startElY;
+      let isDragging = false;
+      let dragMoved = false;
+
+      function positionEl() {
+        const pos = getPos();
+        el.style.left = pos.x + '%';
+        el.style.top = pos.y + '%';
+        el.style.transform = 'translate(-50%, -50%)';
+      }
+
+      positionEl();
+
+      // Touch drag
+      el.addEventListener('touchstart', (e) => {
+        // If textarea is focused (editing mode), don't drag
+        if (el.classList.contains('editing')) return;
+
+        const t = e.touches[0];
+        startTouchX = t.clientX;
+        startTouchY = t.clientY;
+        const pos = getPos();
+        startElX = pos.x;
+        startElY = pos.y;
+        isDragging = true;
+        dragMoved = false;
+        el.classList.add('dragging');
+        e.stopPropagation();
+      }, { passive: true });
+
+      window.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        const t = e.touches[0];
+        const dx = t.clientX - startTouchX;
+        const dy = t.clientY - startTouchY;
+
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragMoved = true;
+
+        const newX = startElX + (dx / window.innerWidth) * 100;
+        const newY = startElY + (dy / window.innerHeight) * 100;
+
+        // Clamp to page bounds
+        const cx = Math.max(5, Math.min(95, newX));
+        const cy = Math.max(3, Math.min(97, newY));
+
+        setPos({ x: cx, y: cy });
+        el.style.left = cx + '%';
+        el.style.top = cy + '%';
+      }, { passive: true });
+
+      window.addEventListener('touchend', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        el.classList.remove('dragging');
+        save();
+      }, { passive: true });
+
+      // Mouse drag (desktop)
+      el.addEventListener('mousedown', (e) => {
+        if (el.classList.contains('editing')) return;
+        if (e.target.tagName === 'TEXTAREA') return;
+
+        startTouchX = e.clientX;
+        startTouchY = e.clientY;
+        const pos = getPos();
+        startElX = pos.x;
+        startElY = pos.y;
+        isDragging = true;
+        dragMoved = false;
+        el.classList.add('dragging');
+        e.preventDefault();
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startTouchX;
+        const dy = e.clientY - startTouchY;
+
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragMoved = true;
+
+        const newX = startElX + (dx / window.innerWidth) * 100;
+        const newY = startElY + (dy / window.innerHeight) * 100;
+
+        const cx = Math.max(5, Math.min(95, newX));
+        const cy = Math.max(3, Math.min(97, newY));
+
+        setPos({ x: cx, y: cy });
+        el.style.left = cx + '%';
+        el.style.top = cy + '%';
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        el.classList.remove('dragging');
+        save();
+      });
+
+      return { positionEl, wasDragged: () => dragMoved };
+    }
+
+    function renderPage(pageData, container) {
+      const start = new Date(pageData.start);
+      const end = new Date(pageData.end);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
+
+      const msPerDay = 86400000;
+      const isWeek = pageData.unit === 'week';
+
+      let totalUnits, elapsed;
+      if (isWeek) {
+        const totalDays = Math.ceil((end - start) / msPerDay);
+        totalUnits = Math.ceil(totalDays / 7);
+        const elapsedDays = Math.max(0, Math.ceil((today - start) / msPerDay));
+        elapsed = Math.floor(elapsedDays / 7);
+      } else {
+        totalUnits = Math.ceil((end - start) / msPerDay);
+        elapsed = Math.max(0, Math.ceil((today - start) / msPerDay));
+      }
+
+      const remaining = Math.max(0, totalUnits - elapsed);
+      const { cols, dotSize, gap } = calcGrid(totalUnits);
+
+      // Count
+      container.querySelector('.page-name').textContent = pageData.name;
+      container.querySelector('.page-count').textContent = remaining.toLocaleString();
+      container.querySelector('.page-sublabel').textContent = formatSublabel(remaining, pageData.unit);
+
+      // Text areas
+      const aboveTA = container.querySelector('.ta-above');
+      const belowTA = container.querySelector('.ta-below');
+      aboveTA.value = pageData.textAbove || '';
+      belowTA.value = pageData.textBelow || '';
+      requestAnimationFrame(() => { autoResize(aboveTA); autoResize(belowTA); });
+
+      // Grid
+      const gridEl = container.querySelector('.grid');
+      gridEl.style.gridTemplateColumns = `repeat(${cols}, ${dotSize}px)`;
+      gridEl.style.gap = `${gap}px`;
+      gridEl.innerHTML = '';
+
+      const frag = document.createDocumentFragment();
+      const enableBreathe = totalUnits < 500;
+
+      for (let i = 0; i < totalUnits; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'dot';
+        dot.style.width = dotSize + 'px';
+        dot.style.height = dotSize + 'px';
+
+        const unitFromStart = totalUnits - 1 - i;
+
+        if (unitFromStart < elapsed) {
+          dot.classList.add('gone');
+        } else if (unitFromStart === elapsed) {
+          dot.classList.add('today');
+        } else if (enableBreathe) {
+          dot.classList.add('remaining');
+          const row = Math.floor(i / cols);
+          const col = i % cols;
+          dot.style.setProperty('--bd', ((row * 0.12 + col * 0.06) % 4).toFixed(2) + 's');
+        }
+
+        frag.appendChild(dot);
+      }
+
+      gridEl.appendChild(frag);
+    }
+
+    function buildPages() {
+      pagesEl.innerHTML = '';
+      pagesEl.style.width = (pages.length * 100) + 'vw';
+
+      pages.forEach((p, idx) => {
+        const page = document.createElement('div');
+        page.className = 'page';
+        page.dataset.idx = idx;
+
+        page.innerHTML = `
+          <div class="grid-wrap">
+            <div class="grid"></div>
+          </div>
+          <div class="floating-count">
+            <div class="page-name"></div>
+            <div class="page-count"></div>
+            <div class="page-sublabel"></div>
+          </div>
+          <div class="floating-text ft-above">
+            <textarea class="ta-above" placeholder="tap to add text..." rows="1" spellcheck="false"></textarea>
+          </div>
+          <div class="floating-text ft-below">
+            <textarea class="ta-below" placeholder="tap to add text..." rows="1" spellcheck="false"></textarea>
+          </div>
+        `;
+
+        pagesEl.appendChild(page);
+
+        // ── Make count block draggable ──
+        const countBlock = page.querySelector('.floating-count');
+        const countDrag = makeDraggable(
+          countBlock,
+          () => p.posCount,
+          (pos) => { p.posCount = pos; },
+          idx
+        );
+
+        // Tap count to toggle visibility
+        countBlock.addEventListener('click', () => {
+          if (countDrag.wasDragged()) return;
+          countBlock.querySelector('.page-count').classList.toggle('hidden');
+        });
+
+        // ── Make text blocks draggable ──
+        const ftAbove = page.querySelector('.ft-above');
+        const ftBelow = page.querySelector('.ft-below');
+        const aboveTA = page.querySelector('.ta-above');
+        const belowTA = page.querySelector('.ta-below');
+
+        const aboveDrag = makeDraggable(
+          ftAbove,
+          () => p.posAbove,
+          (pos) => { p.posAbove = pos; },
+          idx
+        );
+
+        const belowDrag = makeDraggable(
+          ftBelow,
+          () => p.posBelow,
+          (pos) => { p.posBelow = pos; },
+          idx
+        );
+
+        // Double-tap to edit text (enters editing mode)
+        function setupTextEditing(ftEl, ta, dragHelper) {
+          let lastTap = 0;
+
+          ftEl.addEventListener('click', (e) => {
+            if (dragHelper.wasDragged()) return;
+
+            const now = Date.now();
+            if (now - lastTap < 350) {
+              // Double tap — enter edit mode
+              ftEl.classList.add('editing');
+              ta.focus();
+              e.stopPropagation();
+            }
+            lastTap = now;
+          });
+
+          ta.addEventListener('blur', () => {
+            ftEl.classList.remove('editing');
+          });
+
+          ta.addEventListener('input', () => {
+            autoResize(ta);
+            p.textAbove = page.querySelector('.ta-above').value;
+            p.textBelow = page.querySelector('.ta-below').value;
+            save();
+          });
+        }
+
+        setupTextEditing(ftAbove, aboveTA, aboveDrag);
+        setupTextEditing(ftBelow, belowTA, belowDrag);
+
+        renderPage(p, page);
+      });
+
+      // Indicators
+      indicatorsEl.innerHTML = '';
+      pages.forEach((_, idx) => {
+        const dot = document.createElement('div');
+        dot.className = 'indicator' + (idx === currentPage ? ' active' : '');
+        indicatorsEl.appendChild(dot);
+      });
+
+      updateTransform(false);
+    }
+
+    function updateTransform(animate = true) {
+      if (!animate) pagesEl.classList.add('swiping');
+      else pagesEl.classList.remove('swiping');
+      pagesEl.style.transform = `translateX(-${currentPage * 100}vw)`;
+      if (!animate) requestAnimationFrame(() => pagesEl.classList.remove('swiping'));
+
+      indicatorsEl.querySelectorAll('.indicator').forEach((ind, i) => {
+        ind.classList.toggle('active', i === currentPage);
+      });
+    }
+
+    // ── Swipe ──
+    let swipeStartX = 0;
+    let swipeStartY = 0;
+    let swipeDeltaX = 0;
+    let isSwiping = false;
+    let swipeLocked = false;
+
+    pagesEl.addEventListener('touchstart', (e) => {
+      // Skip if touching a floating element
+      if (e.target.closest('.floating-text, .floating-count')) return;
+      swipeStartX = e.touches[0].clientX;
+      swipeStartY = e.touches[0].clientY;
+      swipeDeltaX = 0;
+      isSwiping = false;
+      swipeLocked = false;
+    }, { passive: true });
+
+    pagesEl.addEventListener('touchmove', (e) => {
+      if (e.target.closest('.floating-text, .floating-count')) return;
+
+      const dx = e.touches[0].clientX - swipeStartX;
+      const dy = e.touches[0].clientY - swipeStartY;
+
+      if (!swipeLocked) {
+        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+          swipeLocked = true;
+          isSwiping = Math.abs(dx) > Math.abs(dy);
+        }
+        return;
+      }
+
+      if (!isSwiping) return;
+
+      e.preventDefault();
+      swipeDeltaX = dx;
+      pagesEl.classList.add('swiping');
+
+      const baseOffset = currentPage * 100;
+      const dragVw = (dx / window.innerWidth) * 100;
+      pagesEl.style.transform = `translateX(-${baseOffset - dragVw}vw)`;
+    }, { passive: false });
+
+    pagesEl.addEventListener('touchend', (e) => {
+      if (e.target.closest('.floating-text, .floating-count')) return;
+      if (!isSwiping) return;
+      pagesEl.classList.remove('swiping');
+
+      const threshold = window.innerWidth * 0.18;
+      if (swipeDeltaX < -threshold && currentPage < pages.length - 1) {
+        currentPage++;
+      } else if (swipeDeltaX > threshold && currentPage > 0) {
+        currentPage--;
+      }
+
+      updateTransform(true);
+    }, { passive: true });
+
+    // ── Long press on grid area to edit countdown ──
+    let longPressTimer = null;
+
+    pagesEl.addEventListener('touchstart', (e) => {
+      if (e.target.closest('.floating-text, .floating-count')) return;
+      longPressTimer = setTimeout(() => { openEdit(currentPage); }, 600);
+    }, { passive: true });
+
+    pagesEl.addEventListener('touchmove', () => { clearTimeout(longPressTimer); }, { passive: true });
+    pagesEl.addEventListener('touchend', () => { clearTimeout(longPressTimer); }, { passive: true });
+
+    // Desktop double-click on grid
+    pagesEl.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.floating-text, .floating-count')) return;
+      openEdit(currentPage);
+    });
+
+    // ── Edit overlay ──
+    const editOverlay = document.getElementById('editOverlay');
+    const editName = document.getElementById('editName');
+    const editStart = document.getElementById('editStart');
+    const editEnd = document.getElementById('editEnd');
+    let editingIdx = -1;
+
+    function openEdit(idx) {
+      editingIdx = idx;
+      const p = pages[idx];
+      editName.value = p.name;
+      editStart.value = new Date(p.start).toISOString().split('T')[0];
+      editEnd.value = new Date(p.end).toISOString().split('T')[0];
+      editOverlay.classList.add('open');
+      document.getElementById('editDelete').style.display = pages.length > 1 ? 'block' : 'none';
+    }
+
+    document.getElementById('editSave').addEventListener('click', () => {
+      pages[editingIdx].name = editName.value || 'Untitled';
+      pages[editingIdx].start = new Date(editStart.value + 'T00:00:00').toISOString();
+      pages[editingIdx].end = new Date(editEnd.value + 'T00:00:00').toISOString();
+
+      const span = new Date(pages[editingIdx].end) - new Date(pages[editingIdx].start);
+      pages[editingIdx].unit = (span / 86400000) > 730 ? 'week' : 'day';
+
+      save();
+      buildPages();
+      editOverlay.classList.remove('open');
+    });
+
+    document.getElementById('editCancel').addEventListener('click', () => {
+      editOverlay.classList.remove('open');
+    });
+
+    document.getElementById('editDelete').addEventListener('click', () => {
+      if (pages.length <= 1) return;
+      pages.splice(editingIdx, 1);
+      if (currentPage >= pages.length) currentPage = pages.length - 1;
+      save();
+      buildPages();
+      editOverlay.classList.remove('open');
+    });
+
+    // ── Add page ──
+    document.getElementById('addPage').addEventListener('click', () => {
+      const newEnd = new Date(today);
+      newEnd.setDate(newEnd.getDate() + 30);
+      pages.push({
+        id: 'p' + Date.now(),
+        name: 'New',
+        start: today.toISOString(),
+        end: newEnd.toISOString(),
+        unit: 'day',
+        textAbove: '', textBelow: '',
+        posAbove: { x: 50, y: 20 },
+        posBelow: { x: 50, y: 85 },
+        posCount: { x: 50, y: 8 },
+      });
+      save();
+      currentPage = pages.length - 1;
+      buildPages();
+      openEdit(currentPage);
+    });
+
+    // ── Keyboard ──
+    document.addEventListener('keydown', (e) => {
+      if (editOverlay.classList.contains('open')) return;
+      if (document.activeElement?.tagName === 'TEXTAREA' || document.activeElement?.tagName === 'INPUT') return;
+      if (e.key === 'ArrowRight' && currentPage < pages.length - 1) {
+        currentPage++;
+        updateTransform(true);
+      } else if (e.key === 'ArrowLeft' && currentPage > 0) {
+        currentPage--;
+        updateTransform(true);
+      }
+    });
+
+    window.addEventListener('resize', () => buildPages());
+
+    buildPages();
+  </script>
+</body>
+</html>
