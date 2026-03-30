@@ -1,4 +1,4 @@
-const CACHE = 'zoe-kikun-v2';
+const CACHE = 'zoe-kikun-v3';
 const ASSETS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', (e) => {
