@@ -2,7 +2,7 @@
   "name": "Zoe Kikun",
   "short_name": "Zoe Kikun",
   "description": "Time remaining, visualized.",
-  "start_url": "/",
+  "start_url": "./",
   "display": "fullscreen",
   "background_color": "#000000",
   "theme_color": "#000000",
